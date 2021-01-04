@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/styles.css">
+    <title>ARK Analyzer</title>
+</head>
+<body>
+    <div class="container">
+        <div>
+            <h1>ARK Analyzer</h1>
+            <b>Funds: </b>{% for fund in ark.keys() %}
+                <a href="{{ ark[fund]['details'] }}" target="#">{{ fund }}</a>
+            {% endfor %}
+            <h3>Click on column headings to sort</h3>
+            <i>Default page is sorted by Market Value</i>
+        </div>
+        <div>
+            <table>
+                <tr>
+                    {% for header in df.columns %}
+                        <th>{{ header }}</th>
+                    {% endfor %}
+                </tr>
+                {%  for idx, row in df.iterrows() %}
+                    <tr>
+                        <td><a href="https://finance.yahoo.com/quote/{{ row[0] }}" target="#">{{ row[0] }}</a></td>
+                        {% for cell in row[1:] %}
+                            <td>{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </table>
+            <script>
+                const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
+
+                const comparer = (idx, asc) => (a, b) => ((v1, v2) => 
+                    v1 !== '' && v2 !== '' && !isNaN(v1) && !isNaN(v2) ? v1 - v2 : v1.toString().localeCompare(v2)
+                    )(getCellValue(asc ? a : b, idx), getCellValue(asc ? b : a, idx));
+
+                // do the work...
+                document.querySelectorAll('th').forEach(th => th.addEventListener('click', (() => {
+                    const table = th.closest('table');
+                    Array.from(table.querySelectorAll('tr:nth-child(n+2)'))
+                        .sort(comparer(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
+                        .forEach(tr => table.appendChild(tr) );
+                })));
+            </script>
+        </div>
+    </div>
+</body>
