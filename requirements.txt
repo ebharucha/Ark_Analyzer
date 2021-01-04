@@ -2,4 +2,5 @@ numpy
 pandas
 flask
 requests
+xlrd
 gunicorn
