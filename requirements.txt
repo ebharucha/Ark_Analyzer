@@ -3,7 +3,5 @@ pandas
 flask
 requests
 datetime
-re
-os
 shutil
 gunicorn
