@@ -4,4 +4,6 @@ flask
 requests
 xlrd
 openpyxl
+yahoo_fin
+requests_html
 gunicorn

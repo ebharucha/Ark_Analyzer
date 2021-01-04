@@ -10,7 +10,9 @@ import requests
 import datetime
 import re
 import os
+import glob
 import shutil
+from yahoo_fin import stock_info as si
 
 # Function to initiatize values for ARK funds
 def arkIntialize ():
@@ -83,6 +85,14 @@ def consolidateFundData(df_):
     df_consolidated.sort_values('Market Value($)', ascending=False, inplace=True)
     return (df_consolidated)
 
+# Function to get stock price
+def prices(sym):
+    try:
+        price = f'{si.get_live_price(sym):.2f}'
+    except:
+        price = float("NaN")
+    return (price)
+
 # Function to merge prior & new data
 def mergeFundData(df_ark_prior, df_consolidated):
     df = df_ark_prior.merge(df_consolidated, left_on=['Ticker'], right_on=['Ticker'], how='outer')
@@ -106,17 +116,34 @@ def mergeFundData(df_ark_prior, df_consolidated):
     df = df[cols_]
     shares_ = ["_".join(col.split('_')[:-1]) for col in cols if 'Shares_' in col]
     for idx, col in enumerate(shares):
-        df.rename(columns={col:shares_[idx]}, inplace=True)
-    # cols = cols[:2] + shares_ + [f'SharesDelta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
+        df.rename(columns={col: shares_[idx]}, inplace=True)
+    df['Price'] = df['Ticker'].apply(lambda x: prices(x))
+    cols = cols[:2] + ['Price'] + shares_ + [f'SharesDelta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
     # print (cols)
-    # df = df[cols]
+    df = df[cols]
     return (df)
 
 #####################################
 # Specify directory to store data
 DATADIR = './data'
+ARCHIVE = './archive'
+archive = False   # True indciates archiving
+
+# Remove existing .csv files in DATADIR
+filelist=glob.glob(f'{DATADIR}/*.csv')
+for file in filelist:
+    try:
+        os.remove(file)
+        print (f'Deleted {file}')
+    except:
+        print (f'No removal')
+
+# Create DATADIR & ARCHIVE if required
 if not os.path.exists(DATADIR):
     os.makedirs(DATADIR)
+
+if not os.path.exists(ARCHIVE):
+    os.makedirs(ARCHIVE)
 
 today = str(datetime.date.today())
 
@@ -149,4 +176,13 @@ try:
     df_ark_prior
     df = mergeFundData(df_ark_prior, df_consolidated)
 except NameError:
-    print ('df_ark_prior not defined')
+    print('df_ark_prior not defined')
+    
+if (archive):
+    filelist=glob.glob(f'{DATADIR}/*.csv')
+    for file in filelist:
+        try:
+            shutil.move(file, f'{ARCHIVE}/{os.path.basename(file)}')
+            print (f'Archived {file}')
+        except:
+            print (f'Could not archive {file}')
