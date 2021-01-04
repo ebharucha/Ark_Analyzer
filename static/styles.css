@@ -3,10 +3,19 @@
     padding: 30px;
 }
 
-h1 {
-    text-align: center;
+.topBox {
+    display: flex;
+    padding: 30px;
 }
 
+/* h1 {
+    text-align: center;
+} */
+
+.image {
+    width: 100px;
+    height: 60px;
+}
 
 table {
     border-spacing: 0;
@@ -30,3 +39,4 @@ td {
     padding: 10px;
     border: 1px solid black;
 }
+

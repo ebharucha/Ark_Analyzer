@@ -9,13 +9,19 @@
 </head>
 <body>
     <div class="container">
-        <div>
-            <h1>ARK Analyzer</h1>
-            <b>Funds: </b>{% for fund in ark.keys() %}
-                <a href="{{ ark[fund]['details'] }}" target="#">{{ fund }}</a>
-            {% endfor %}
-            <h3>Click on column headings to sort</h3>
-            <i>Default page is sorted by Market Value</i>
+        <div class="topBox">
+            <div>
+                <h1>ARK Analyzer</h1>
+                <b>Funds: </b>{% for fund in ark.keys() %}
+                    <a href="{{ ark[fund]['details'] }}" target="#">{{ fund }}</a>
+                {% endfor %}
+                <h3>Click on column headings to sort</h3>
+                <i>Default page is sorted by Market Value</i>
+            </div>
+            <div>
+                <a href="https://github.com/ebharucha/Ark_Analyzer" target="#">
+                    <img class="image", src="/static/GitHub_Logo.png" alt="GitHub Repo"></a>
+            </div>
         </div>
         <div>
             <table>
