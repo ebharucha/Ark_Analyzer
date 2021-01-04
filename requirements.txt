@@ -3,4 +3,5 @@ pandas
 flask
 requests
 xlrd
+openpyxl
 gunicorn
