@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request
 import os
-import importlib
 import ark_analyzer as ark
 
 app = Flask(__name__)
