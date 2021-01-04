@@ -12,7 +12,7 @@ import re
 import os
 import glob
 import shutil
-from yahoo_fin import stock_info as si
+from yahoo_fin import stock_info as si  
 
 # Function to initiatize values for ARK funds
 def arkIntialize ():
