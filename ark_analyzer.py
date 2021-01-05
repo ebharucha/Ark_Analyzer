@@ -4,6 +4,7 @@
 ########################################################################
 
 # Import dependencies 
+import sqlite3
 import numpy as np
 import pandas as pd
 import requests
@@ -12,7 +13,8 @@ import re
 import os
 import glob
 import shutil
-from yahoo_fin import stock_info as si
+import warnings
+warnings.filterwarnings("ignore")
 
 # Function to initiatize values for ARK funds
 def arkIntialize ():
@@ -77,58 +79,83 @@ def consolidateFundData(df_):
         count.append(info['count'])
     date = re.sub('/', '-', df_.date.unique()[0])
     df_consolidated = pd.DataFrame()
-    df_consolidated['Ticker'] = tickers
-    df_consolidated['Company'] = companies
-    df_consolidated[f'Shares_{date}'] = shares
-    df_consolidated['Market Value($)'] = market_value
-    df_consolidated[f'NumFunds'] = count
-    df_consolidated.sort_values('Market Value($)', ascending=False, inplace=True)
+    df_consolidated['ticker'] = tickers
+    df_consolidated['company'] = companies
+    df_consolidated[f'shares_{date}'] = shares
+    df_consolidated['market value($)'] = market_value
+    df_consolidated[f'num_funds'] = count
+    df_consolidated.sort_values('market value($)', ascending=False, inplace=True)
     return (df_consolidated)
 
-# Function to get stock price
-def prices(sym):
-    try:
-        price = f'{si.get_live_price(sym):.2f}'
-    except:
-        price = float("NaN")
-    return (price)
 
 # Function to merge prior & new data
 def mergeFundData(df_ark_prior, df_consolidated):
-    df = df_ark_prior.merge(df_consolidated, left_on=['Ticker'], right_on=['Ticker'], how='outer')
+    df = df_ark_prior.merge(df_consolidated, left_on=['ticker'], right_on=['ticker'], how='outer')
     company = []
-    for x, y in zip(df.Company_x, df.Company_y):
+    print (df.columns)
+    for x, y in zip(df.company_x, df.company_y):
         if (type(x) == float):
             company.append(y)
         else:
             company.append(x)
-    df['Company'] = company
-    cols = ['Ticker', 'Company']
+    df['company'] = company
+    cols = ['ticker', 'company']
     for col in df.columns:
-        if re.findall('Shares_.*', col):
+        if re.findall('shares_.*', col):
             cols.append(col)
-    cols += ['Market Value($)', 'NumFunds']
+    cols += ['market value($)_y', 'num_funds_y']
     df = df[cols]
-    shares = [col for col in cols if 'Shares_' in col]
+    shares = [col for col in cols if 'shares_' in col]
     dates = [share.split('_')[1] for share in shares]
-    df[f'SharesDelta_{dates[-2]}_To_{dates[-1]}'] = df[shares[-1]] - df[shares[-2]]
-    cols_ = cols[:2] + shares + [f'SharesDelta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
+    df[f'shares_delta_{dates[-2]}_To_{dates[-1]}'] = df[shares[-1]] - df[shares[-2]]
+    cols_ = cols[:2] + shares + [f'shares_delta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
     df = df[cols_]
-    shares_ = ["_".join(col.split('_')[:-1]) for col in cols if 'Shares_' in col]
+    shares_ = ["_".join(col.split('_')[:-1]) for col in cols if 'shares_' in col]
     for idx, col in enumerate(shares):
         df.rename(columns={col: shares_[idx]}, inplace=True)
-    # df['Price'] = df['Ticker'].apply(lambda x: prices(x))
     # cols = cols[:2] + ['Price'] + shares_ + [f'SharesDelta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
-    # print (cols)
     # df = df[cols]
     return (df)
+
+def storeDB(db, table, df, ifexists):
+    conn = sqlite3.connect(db)
+    df.to_sql(table, con=conn, if_exists=ifexists)
+    if (table == "ark"):
+        query = f'DELETE FROM {table} WHERE rowid NOT IN (SELECT MIN(rowid) FROM {table} GROUP BY date,fund,ticker)'
+        try:
+            pd.read_sql_query(query, con=conn)
+            print ('Deleting duplicate Individual Fund data rows')
+        except Exception as e:
+            print(e)
+    elif (table == "arkConsolidated"):
+        query = f'DELETE FROM {table} WHERE rowid NOT IN (SELECT MIN(rowid) FROM {table} GROUP BY ticker)'
+        try:
+            pd.read_sql_query(query, con=conn)
+            print ('Deleting duplicate Individual Fund data rows')
+        except Exception as e:
+            print(e)
+    conn.commit()
+    conn.close()
+
+def loadDFFromDB(db, table):
+    conn = sqlite3.connect(db)
+    try:
+        df = pd.read_sql_query(f'select * from {table}', con=conn)
+        df.drop(columns=['index'], inplace=True)
+    except Exception as e:
+        print (e)
+    conn.close()
+    return (df)
+    
 
 #####################################
 # Specify directory to store data
 DATADIR = './data'
-ARCHIVE = './archive'
-archive = False  # True indciates archiving
+DB = 'ark.db'
+IND_FUND_TABLE = 'ark'
+CONS_FUND_TABLE = 'arkConsolidated'
 today = str(datetime.date.today())
+
 # Main function
 def main():
     # Remove existing .csv files in DATADIR
@@ -140,18 +167,12 @@ def main():
         except:
             print (f'No removal')
 
-    # Create DATADIR & ARCHIVE if required
+    # Create DATADIR if required
     if not os.path.exists(DATADIR):
         os.makedirs(DATADIR)
-    if not os.path.exists(ARCHIVE):
-        os.makedirs(ARCHIVE)
 
-    # Backup & load prior data
-    ark_prior = 'ARK.xlsx'
-    if os.path.isfile(f'{DATADIR}/{ark_prior}'):
-        shutil.copyfile(f'{DATADIR}/{ark_prior}', f'{DATADIR}/{ark_prior}.bak')  # Make a backup copy   
-        df_ark_prior = pd.read_excel(f'{DATADIR}/{ark_prior}')
-        df_ark_prior = df_ark_prior.iloc[:,:-2]
+    # Load prior Consolidated Fund data from DB
+    df_ark_prior = loadDFFromDB(f'{DATADIR}/{DB}', f'{CONS_FUND_TABLE}')
 
     # Initialzie values for ARK funds
     ark = arkIntialize()
@@ -166,24 +187,24 @@ def main():
     df_.reset_index(inplace=True)
     df_.drop(columns=['index'], inplace=True)
 
+    # Store Individual Fund data in DB
+    storeDB(f'{DATADIR}/{DB}', f'{IND_FUND_TABLE}', df_, 'append')
+
     # Consoldiate data across funds & sort by market cap
+    ark_consolidated = 'ARK.xlsx'
     df_consolidated = consolidateFundData(df_)
-    df_consolidated.to_excel(f'{DATADIR}/{ark_prior}', index=False)
+    df_consolidated.to_excel(f'{DATADIR}/{ark_consolidated}', index=False)
+
+    # Store new Consolidated Fund data in DB
+    storeDB(f'{DATADIR}/{DB}', f'{CONS_FUND_TABLE}', df_consolidated, 'replace')
 
     # Merge prior & new data
     try:
         df_ark_prior
         df = mergeFundData(df_ark_prior, df_consolidated)
-    except NameError:
-        print('df_ark_prior not defined')
-        
-    if (archive):
-        filelist=glob.glob(f'{DATADIR}/*.csv')
-        for file in filelist:
-            try:
-                shutil.move(file, f'{ARCHIVE}/{os.path.basename(file)}')
-                print (f'Archived {file}')
-            except:
-                print(f'Could not archive {file}')
-                
+    except Exception as e:
+        print(e)
+    df.to_excel(f'{DATADIR}/uuu.xlsx', index=False)
     return(ark, df)
+
+# main()

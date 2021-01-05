@@ -6,4 +6,5 @@ xlrd
 openpyxl
 yahoo_fin
 requests_html
+sqlite3
 gunicorn
