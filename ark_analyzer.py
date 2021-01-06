@@ -104,15 +104,19 @@ def mergeFundData(df_ark_prior, df_consolidated):
         if re.findall('shares_.*', col):
             cols.append(col)
     cols += ['market value($)_y', 'num_funds_y']
+    print (f'----------{cols}----------')
     df = df[cols]
     shares = [col for col in cols if 'shares_' in col]
     dates = [share.split('_')[1] for share in shares]
-    df[f'shares_delta_{dates[-2]}_To_{dates[-1]}'] = df[shares[-1]] - df[shares[-2]]
-    cols_ = cols[:2] + shares + [f'shares_delta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
+    # df[f'shares_delta_{dates[-2]}_To_{dates[-1]}'] = df[shares[-1]] - df[shares[-2]]
+    # cols_ = cols[:2] + shares + [f'shares_delta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
+    cols_ = cols[:2] + shares + cols[-2:]
+    print (f'----------{cols}----------')
     df = df[cols_]
-    shares_ = ["_".join(col.split('_')[:-1]) for col in cols if 'shares_' in col]
-    for idx, col in enumerate(shares):
-        df.rename(columns={col: shares_[idx]}, inplace=True)
+    # shares_ = ["_".join(col.split('_')[:-1]) for col in cols if 'shares_' in col]
+    # print (f'----------{shares_}----------')
+    # for idx, col in enumerate(shares):
+    #     df.rename(columns={col: shares_[idx]}, inplace=True)
     # cols = cols[:2] + ['Price'] + shares_ + [f'SharesDelta_{dates[-2]}_To_{dates[-1]}'] + cols[-2:]
     # df = df[cols]
     return (df)
@@ -150,11 +154,13 @@ def loadDFFromDB(db, table):
 
 #####################################
 # Specify directory to store data
+today = str(datetime.date.today())
 DATADIR = './data'
+UPDATEDIR = f'{DATADIR}/update'
+UPDATEFLAG = f'update_{today}'
 DB = 'ark.db'
 IND_FUND_TABLE = 'ark'
 CONS_FUND_TABLE = 'arkConsolidated'
-today = str(datetime.date.today())
 
 # Main function
 def main():
@@ -167,9 +173,11 @@ def main():
         except:
             print (f'No removal')
 
-    # Create DATADIR if required
+    # Create DATADIR & UPDATEDIR if required
     if not os.path.exists(DATADIR):
         os.makedirs(DATADIR)
+    if not os.path.exists(UPDATEDIR):
+        os.makedirs(UPDATEDIR)
 
     # Load prior Consolidated Fund data from DB
     df_ark_prior = loadDFFromDB(f'{DATADIR}/{DB}', f'{CONS_FUND_TABLE}')
@@ -177,34 +185,45 @@ def main():
     # Initialzie values for ARK funds
     ark = arkIntialize()
 
-    # Download fund data
-    df = {}
-    df_ = pd.DataFrame()
-    for fund in ark.keys():
-        df[fund] = getFundData(fund, ark[fund]['URL'])
-        df_ = pd.concat([df_, df[fund]])
-    df_['count'] = [1]*df_.shape[0]
-    df_.reset_index(inplace=True)
-    df_.drop(columns=['index'], inplace=True)
+    if os.path.isfile(f'{UPDATEDIR}/{UPDATEFLAG}'):
+        df = df_ark_prior
+    else: 
+        # Download fund data
+        df = {}
+        df_ = pd.DataFrame()
+        for fund in ark.keys():
+            df[fund] = getFundData(fund, ark[fund]['URL'])
+            df_ = pd.concat([df_, df[fund]])
+        df_['count'] = [1]*df_.shape[0]
+        df_.reset_index(inplace=True)
+        df_.drop(columns=['index'], inplace=True)
 
-    # Store Individual Fund data in DB
-    storeDB(f'{DATADIR}/{DB}', f'{IND_FUND_TABLE}', df_, 'append')
+        # Store Individual Fund data in DB
+        storeDB(f'{DATADIR}/{DB}', f'{IND_FUND_TABLE}', df_, 'append')
 
-    # Consoldiate data across funds & sort by market cap
-    ark_consolidated = 'ARK.xlsx'
-    df_consolidated = consolidateFundData(df_)
-    df_consolidated.to_excel(f'{DATADIR}/{ark_consolidated}', index=False)
+        # Create update flag
+        with open(f'{UPDATEDIR}/{UPDATEFLAG}', 'w') as f:
+            f.write(today)
 
-    # Store new Consolidated Fund data in DB
-    storeDB(f'{DATADIR}/{DB}', f'{CONS_FUND_TABLE}', df_consolidated, 'replace')
+        # Consoldiate data across funds & sort by market cap
+        ark_consolidated = 'ARK.xlsx'
+        df_consolidated = consolidateFundData(df_)
+        # df_consolidated.to_excel(f'{DATADIR}/{ark_consolidated}', index=False)
 
-    # Merge prior & new data
-    try:
-        df_ark_prior
-        df = mergeFundData(df_ark_prior, df_consolidated)
-    except Exception as e:
-        print(e)
-    df.to_excel(f'{DATADIR}/uuu.xlsx', index=False)
+        # Store new Consolidated Fund data in DB
+        # storeDB(f'{DATADIR}/{DB}', f'{CONS_FUND_TABLE}', df_consolidated, 'replace')
+
+        # Merge prior & new data
+        try:
+            df_ark_prior
+            df = mergeFundData(df_ark_prior, df_consolidated)
+        except Exception as e:
+            print(e)
+
+        # Store overall Consolidated Fund data in DB
+        storeDB(f'{DATADIR}/{DB}', f'{CONS_FUND_TABLE}', df, 'replace')
+        df.to_excel(f'{DATADIR}/{ark_consolidated}', index=False)
+
     return(ark, df)
 
 # main()
